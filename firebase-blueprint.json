@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "A workflow task with subtasks, comments, attachments and status tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 500 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "columnId": { "type": "string" },
+        "priority": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "estimatedHours": { "type": "number" },
+        "trackedSeconds": { "type": "number" },
+        "projectId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "columnId", "projectId"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A team member or collaborator",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "username": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "avatarBg": { "type": "string" },
+        "role": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A workspace project or board",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name"]
+    },
+    "Column": {
+      "title": "Column",
+      "description": "Kanban board column metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "color": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A real-time team chat message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "userId": { "type": "string" },
+        "text": { "type": "string", "maxLength": 4000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "projectId", "userId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Collection of tasks"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of workspace team members"
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Collection of workspace projects"
+    },
+    "/columns/{columnId}": {
+      "schema": { "$ref": "#/entities/Column" },
+      "description": "Collection of board columns"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Collection of team chat messages"
+    }
+  }
+}

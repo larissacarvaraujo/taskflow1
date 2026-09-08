@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+}
+
+:root.dark,
+.dark {
+  color-scheme: dark;
+
+  /* True Pitch-Black & Neutral Charcoal Palette (removes blue tint) */
+  --color-slate-950: #000000;
+  --color-slate-900: #0a0a0a;
+  --color-slate-850: #121212;
+  --color-slate-800: #171717;
+  --color-slate-750: #1f1f1f;
+  --color-slate-700: #262626;
+  --color-slate-600: #3f3f46;
+  --color-slate-500: #71717a;
+  --color-slate-400: #a1a1aa;
+  --color-slate-300: #d4d4d8;
+  --color-slate-200: #e4e4e7;
+  --color-slate-100: #f4f4f5;
+  --color-slate-50: #fafafa;
+
+  /* Neutralize dark indigo/blue tints in dark mode */
+  --color-indigo-950: #121212;
+  --color-indigo-900: #1c1c1c;
+  --color-indigo-800: #2a2a2a;
+  --color-sky-950: #121212;
+}
+
+html.dark,
+body.dark,
+.dark {
+  background-color: #000000;
+  color: #f4f4f5;
+}
+
+/* Ensure native date inputs render readable text and light calendar picker icon in dark mode */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.9);
+  cursor: pointer;
+}

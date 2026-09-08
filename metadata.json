@@ -1,0 +1,6 @@
+{
+  "name": "TaskFlow - Rastreamento e Gestão de Tarefas",
+  "description": "Sistema ágil de gestão e rastreamento de tarefas com dashboard intuitivo, métricas de produtividade, quadro Kanban, visualização em tabela e acompanhamento de prazos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
