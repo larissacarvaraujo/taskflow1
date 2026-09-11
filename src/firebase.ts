@@ -151,7 +151,7 @@ export function subscribeToTasks(
     },
     (error) => {
       onError?.(error);
-      handleFirestoreError(error, OperationType.GET, path);
+      handleFirestoreError(error, OperationType.LIST, path);
     }
   );
   return unsubscribe;
@@ -207,7 +207,7 @@ export function subscribeToUsers(
     },
     (error) => {
       onError?.(error);
-      handleFirestoreError(error, OperationType.GET, path);
+      handleFirestoreError(error, OperationType.LIST, path);
     }
   );
   return unsubscribe;
@@ -277,7 +277,7 @@ export function subscribeToColumns(
     },
     (error) => {
       onError?.(error);
-      handleFirestoreError(error, OperationType.GET, path);
+      handleFirestoreError(error, OperationType.LIST, path);
     }
   );
   return unsubscribe;
@@ -331,7 +331,7 @@ export function subscribeToMessages(
     },
     (error) => {
       onError?.(error);
-      handleFirestoreError(error, OperationType.GET, path);
+      handleFirestoreError(error, OperationType.LIST, path);
     }
   );
   return unsubscribe;

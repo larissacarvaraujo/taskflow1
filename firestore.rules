@@ -6,23 +6,28 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
-      allow read, write: if isValidId(taskId);
+      allow read: if true;
+      allow write: if isValidId(taskId);
     }
 
     match /users/{userId} {
-      allow read, write: if isValidId(userId);
+      allow read: if true;
+      allow write: if isValidId(userId);
     }
 
     match /projects/{projectId} {
-      allow read, write: if isValidId(projectId);
+      allow read: if true;
+      allow write: if isValidId(projectId);
     }
 
     match /columns/{columnId} {
-      allow read, write: if isValidId(columnId);
+      allow read: if true;
+      allow write: if isValidId(columnId);
     }
 
     match /messages/{messageId} {
-      allow read, write: if isValidId(messageId);
+      allow read: if true;
+      allow write: if isValidId(messageId);
     }
 
     match /test/{docId} {

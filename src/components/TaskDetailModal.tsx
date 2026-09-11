@@ -428,17 +428,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 placeholder="Detalhes, especificações, objetivos e escopo da tarefa... Use @nome para marcar colaboradores."
                 className="w-full text-xs text-slate-800 dark:text-slate-100 p-3 rounded-xl border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50/50 dark:bg-slate-950/70 focus:bg-white dark:focus:bg-slate-950 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
-
-              {description && (
-                <div className="mt-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
-                  <span className="text-[10px] font-semibold uppercase text-slate-400 dark:text-slate-500 block mb-1">
-                    Visualização formatada com menções:
-                  </span>
-                  <p className="whitespace-pre-wrap leading-relaxed">
-                    {renderTextWithMentions(description)}
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* Sub-tarefas (Subtasks para projetos complexos) */}

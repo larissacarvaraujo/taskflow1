@@ -13,6 +13,7 @@ import { TeamManagementModal } from './components/TeamManagementModal';
 import { InviteAcceptModal } from './components/InviteAcceptModal';
 import { TeamChatSidebar } from './components/TeamChatSidebar';
 import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
+import { TagFilterSidebar, getTagPalette } from './components/TagFilterSidebar';
 import { Task, User, Project, Column, ColumnId, NotificationItem, TeamChatMessage, ActiveView } from './types';
 import { resolveInvite, StoredInvite } from './services/inviteService';
 import {
@@ -35,7 +36,7 @@ import {
   markAsNotified,
   NotificationPermissionStatus,
 } from './services/systemNotificationService';
-import { CheckCircle2, Undo2, AlertTriangle, X, Mail } from 'lucide-react';
+import { CheckCircle2, Undo2, AlertTriangle, X, Mail, Filter, Tag, SlidersHorizontal, ChevronRight } from 'lucide-react';
 import {
   subscribeToTasks,
   saveTaskToCloud,
@@ -227,6 +228,17 @@ export default function App() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagFilterMode, setTagFilterMode] = useState<'any' | 'all'>('any');
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('taskflow_tag_sidebar_open');
+      if (saved !== null) return saved === 'true';
+      return typeof window !== 'undefined' ? window.innerWidth >= 1024 : true;
+    } catch {
+      return true;
+    }
+  });
 
   // Real-time Firebase Cloud Synchronization
   useEffect(() => {
@@ -893,6 +905,59 @@ export default function App() {
     playAlertSound();
   };
 
+  // Unique tags across all tasks of current project
+  const allProjectTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    tasks.forEach((t) => {
+      if (t.projectId === currentProjectId && Array.isArray(t.tags)) {
+        t.tags.forEach((tag) => {
+          const trimmed = tag.trim();
+          if (trimmed) tagSet.add(trimmed);
+        });
+      }
+    });
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [tasks, currentProjectId]);
+
+  // Counts of tasks per tag in current project
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    tasks.forEach((t) => {
+      if (t.projectId === currentProjectId && Array.isArray(t.tags)) {
+        t.tags.forEach((tag) => {
+          const trimmed = tag.trim();
+          if (trimmed) {
+            counts[trimmed] = (counts[trimmed] || 0) + 1;
+          }
+        });
+      }
+    });
+    return counts;
+  }, [tasks, currentProjectId]);
+
+  const currentProjectTasksCount = useMemo(() => {
+    return tasks.filter((t) => t.projectId === currentProjectId).length;
+  }, [tasks, currentProjectId]);
+
+  const handleToggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleSelectAllTags = () => {
+    setSelectedTags(allProjectTags);
+  };
+
+  const handleClearTags = () => {
+    setSelectedTags([]);
+  };
+
+  // Reset selected tags when changing projects
+  useEffect(() => {
+    setSelectedTags([]);
+  }, [currentProjectId]);
+
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -900,6 +965,19 @@ export default function App() {
       if (selectedUserId && task.assigneeId !== selectedUserId) return false;
       if (priorityFilter !== 'all' && task.priority !== priorityFilter)
         return false;
+      
+      // Multiple Tags Filter
+      if (selectedTags.length > 0) {
+        if (!task.tags || task.tags.length === 0) return false;
+        if (tagFilterMode === 'all') {
+          const hasAll = selectedTags.every((st) => task.tags.includes(st));
+          if (!hasAll) return false;
+        } else {
+          const hasAny = selectedTags.some((st) => task.tags.includes(st));
+          if (!hasAny) return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = task.title.toLowerCase().includes(q);
@@ -912,7 +990,7 @@ export default function App() {
       }
       return true;
     });
-  }, [tasks, currentProjectId, selectedUserId, priorityFilter, searchQuery]);
+  }, [tasks, currentProjectId, selectedUserId, priorityFilter, selectedTags, tagFilterMode, searchQuery]);
 
   // User Auth & Team Handlers
   const handleLogin = (user: User) => {
@@ -1149,33 +1227,154 @@ export default function App() {
             }}
             onExportCsv={handleExportCsv}
           />
-        ) : activeView === 'kanban' ? (
-          <KanbanBoard
-            columns={columns}
-            tasks={filteredTasks}
-            users={users}
-            activeTrackingTaskId={activeTrackingTaskId}
-            onToggleTimer={handleToggleTimer}
-            onOpenDetails={(task) => setSelectedTaskForDetail(task)}
-            onDeleteTask={handleDeleteTask}
-            onUpdateTask={handleUpdateTask}
-            onMoveTask={handleMoveTask}
-            onQuickAddTask={handleQuickAddTask}
-            onUpdateColumnTitle={handleUpdateColumnTitle}
-            onClearColumnTasks={handleClearColumnTasks}
-          />
         ) : (
-          <RunrunTableView
-            tasks={filteredTasks}
-            users={users}
-            activeTrackingTaskId={activeTrackingTaskId}
-            onToggleTimer={handleToggleTimer}
-            onOpenDetails={(task) => setSelectedTaskForDetail(task)}
-            onDeleteTask={handleDeleteTask}
-            onUpdateTask={handleUpdateTask}
-            onStatusChange={handleMoveTask}
-            onExportCsv={handleExportCsv}
-          />
+          <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5">
+            {/* View Subheader with Tag Filter Toggle & Quick Badges */}
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Toggle Filter Sidebar Button */}
+                <button
+                  id="toggle-tag-filter-sidebar-btn"
+                  type="button"
+                  onClick={() => setIsFilterSidebarOpen((prev) => !prev)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer shadow-2xs ${
+                    isFilterSidebarOpen || selectedTags.length > 0
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                  title={isFilterSidebarOpen ? 'Ocultar barra de filtros' : 'Abrir barra lateral de filtros por etiquetas'}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Filtro por Etiquetas</span>
+                  {selectedTags.length > 0 ? (
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">
+                      {selectedTags.length}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 font-normal">
+                      ({allProjectTags.length})
+                    </span>
+                  )}
+                </button>
+
+                {/* Active Tag Chips */}
+                {selectedTags.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selectedTags.map((tag) => {
+                      const palette = getTagPalette(tag);
+                      return (
+                        <span
+                          key={tag}
+                          className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border shadow-2xs ${palette.activeBg} ${palette.border} ${palette.text}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${palette.dot}`} />
+                          <span>{tag}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTag(tag)}
+                            className="hover:opacity-75 p-0.5 cursor-pointer"
+                            title={`Remover filtro de ${tag}`}
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
+
+                    <button
+                      id="clear-all-tags-chips-btn"
+                      type="button"
+                      onClick={handleClearTags}
+                      className="text-[11px] font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 underline cursor-pointer ml-1"
+                    >
+                      Limpar filtros ({selectedTags.length})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* View Right Info: Task count & Mode badge */}
+              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                {selectedTags.length > 0 && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">
+                    Modo: {tagFilterMode === 'all' ? 'Todas (E)' : 'Qualquer (OU)'}
+                  </span>
+                )}
+                <span>
+                  Exibindo <strong className="text-slate-900 dark:text-white font-bold">{filteredTasks.length}</strong> de <strong className="text-slate-900 dark:text-white font-bold">{currentProjectTasksCount}</strong> tarefas
+                </span>
+              </div>
+            </div>
+
+            {/* Layout: Sidebar + Kanban/Table */}
+            <div className="flex items-start gap-5 relative">
+              {/* Filter Sidebar */}
+              <TagFilterSidebar
+                allTags={allProjectTags}
+                selectedTags={selectedTags}
+                onToggleTag={handleToggleTag}
+                onSelectAllTags={handleSelectAllTags}
+                onClearTags={handleClearTags}
+                tagFilterMode={tagFilterMode}
+                onChangeTagFilterMode={setTagFilterMode}
+                tagCounts={tagCounts}
+                totalProjectTasks={currentProjectTasksCount}
+                filteredTasksCount={filteredTasks.length}
+                isOpen={isFilterSidebarOpen}
+                onClose={() => setIsFilterSidebarOpen(false)}
+                onToggleOpen={() => setIsFilterSidebarOpen((prev) => !prev)}
+              />
+
+              {/* Collapsed Sidebar Quick Tab (Desktop) */}
+              {!isFilterSidebarOpen && (
+                <button
+                  id="open-tag-sidebar-dock-btn"
+                  type="button"
+                  onClick={() => setIsFilterSidebarOpen(true)}
+                  className="hidden lg:flex flex-col items-center gap-2 py-4 px-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs hover:border-indigo-300 dark:hover:border-indigo-700 transition cursor-pointer text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 group shrink-0"
+                  title="Expandir barra lateral de filtros por etiquetas"
+                >
+                  <Filter className="w-4 h-4 group-hover:scale-110 transition-transform text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider [writing-mode:vertical-lr] rotate-180">
+                    Etiquetas {selectedTags.length > 0 ? `(${selectedTags.length})` : ''}
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              )}
+
+              {/* View Content */}
+              <div className="flex-1 min-w-0">
+                {activeView === 'kanban' ? (
+                  <KanbanBoard
+                    columns={columns}
+                    tasks={filteredTasks}
+                    users={users}
+                    activeTrackingTaskId={activeTrackingTaskId}
+                    onToggleTimer={handleToggleTimer}
+                    onOpenDetails={(task) => setSelectedTaskForDetail(task)}
+                    onDeleteTask={handleDeleteTask}
+                    onUpdateTask={handleUpdateTask}
+                    onMoveTask={handleMoveTask}
+                    onQuickAddTask={handleQuickAddTask}
+                    onUpdateColumnTitle={handleUpdateColumnTitle}
+                    onClearColumnTasks={handleClearColumnTasks}
+                  />
+                ) : (
+                  <RunrunTableView
+                    tasks={filteredTasks}
+                    users={users}
+                    activeTrackingTaskId={activeTrackingTaskId}
+                    onToggleTimer={handleToggleTimer}
+                    onOpenDetails={(task) => setSelectedTaskForDetail(task)}
+                    onDeleteTask={handleDeleteTask}
+                    onUpdateTask={handleUpdateTask}
+                    onStatusChange={handleMoveTask}
+                    onExportCsv={handleExportCsv}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </main>
 
