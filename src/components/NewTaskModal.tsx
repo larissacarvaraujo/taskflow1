@@ -20,6 +20,7 @@ interface NewTaskModalProps {
   initialColumnId?: ColumnId;
   projectId: string;
   users: User[];
+  currentUser?: User | null;
   onAddTask: (task: Partial<Task>) => void;
   onClose: () => void;
   onOpenAddUser?: () => void;
@@ -29,6 +30,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
   initialColumnId = 'todo',
   projectId,
   users,
+  currentUser,
   onAddTask,
   onClose,
   onOpenAddUser,
@@ -37,7 +39,7 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
   const [description, setDescription] = useState('');
   const [columnId, setColumnId] = useState<ColumnId>(initialColumnId);
   const [priority, setPriority] = useState<TaskPriority>('media');
-  const [assigneeId, setAssigneeId] = useState<string | undefined>(users[0]?.id);
+  const [assigneeId, setAssigneeId] = useState<string | undefined>(currentUser?.id || users[0]?.id);
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]
   );
@@ -329,12 +331,19 @@ export const NewTaskModal: React.FC<NewTaskModalProps> = ({
                 onChange={(e) => setAssigneeId(e.target.value || undefined)}
                 className="w-full text-xs px-2.5 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 [color-scheme:light] dark:[color-scheme:dark]"
               >
-                <option value="" className="dark:bg-slate-900 dark:text-slate-100">-- Não atribuído --</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id} className="dark:bg-slate-900 dark:text-slate-100">
-                    {u.name} (@{u.username}) - {u.role}
+                {currentUser && (
+                  <option value={currentUser.id} className="font-bold dark:bg-slate-900 dark:text-slate-100">
+                    Atribuir a mim: {currentUser.name} (Meu Painel)
                   </option>
-                ))}
+                )}
+                <option value="" className="dark:bg-slate-900 dark:text-slate-100">-- Não atribuído (Pendente) --</option>
+                {users
+                  .filter((u) => u.id !== currentUser?.id)
+                  .map((u) => (
+                    <option key={u.id} value={u.id} className="dark:bg-slate-900 dark:text-slate-100">
+                      {u.name} (@{u.username}) - {u.role}
+                    </option>
+                  ))}
               </select>
             </div>
 

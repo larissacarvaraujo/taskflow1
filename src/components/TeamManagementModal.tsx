@@ -19,7 +19,6 @@ interface TeamManagementModalProps {
   currentUser: User | null;
   tasks: Task[];
   onRemoveUser: (userId: string) => void;
-  onSwitchUser?: (user: User) => void;
   onOpenAddUser: () => void;
 }
 
@@ -30,7 +29,6 @@ export const TeamManagementModal: React.FC<TeamManagementModalProps> = ({
   currentUser,
   tasks,
   onRemoveUser,
-  onSwitchUser,
   onOpenAddUser,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,24 +215,6 @@ export const TeamManagementModal: React.FC<TeamManagementModalProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Switch / Login as user button if not current */}
-                    {!isMe && onSwitchUser && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSwitchUser(user);
-                          onClose();
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer text-xs flex items-center gap-1"
-                        title={`Conectar como ${user.name}`}
-                      >
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline text-[11px] font-medium">
-                          Entrar
-                        </span>
-                      </button>
-                    )}
-
                     {/* Remove Member button */}
                     <button
                       id={`delete-user-btn-${user.id}`}

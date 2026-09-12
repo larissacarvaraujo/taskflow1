@@ -108,10 +108,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               onDragOver={(e) => handleDragOver(e, column.id)}
               onDragLeave={() => handleDragLeave(column.id)}
               onDrop={(e) => handleDrop(e, column.id)}
-              className={`relative flex flex-col bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-2.5 border transition-colors min-h-[500px] ${
+              className={`relative flex flex-col bg-slate-100/70 dark:bg-slate-900/60 rounded-xl p-2.5 border transition-colors min-h-[500px] ${
                 isOver
-                  ? 'border-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/30'
-                  : 'border-slate-200/70 dark:border-slate-800/70'
+                  ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                  : 'border-slate-200/80 dark:border-slate-800/80'
               }`}
             >
               {/* Column Header */}

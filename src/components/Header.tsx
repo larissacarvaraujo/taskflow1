@@ -23,6 +23,8 @@ import {
   Mail,
   Users,
   Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import { User, Task, Project, ActiveView } from '../types';
 
@@ -59,6 +61,8 @@ interface HeaderProps {
   onOpenTeamChat: () => void;
   teamChatMessagesCount: number;
   isCloudConnected?: boolean;
+  onRetryConnection?: () => void;
+  isReconnecting?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -94,6 +98,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTeamChat,
   teamChatMessagesCount,
   isCloudConnected = true,
+  onRetryConnection,
+  isReconnecting = false,
 }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -101,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-black/95 backdrop-blur-md border-b border-slate-200/70 dark:border-neutral-800/80 transition-colors duration-200">
       {/* Top Brand & Actions Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
+      <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Logo & Project Selector */}
           <div className="flex items-center gap-2.5">
@@ -295,6 +301,43 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
+            {/* Persistent Firebase Cloud Sync Indicator */}
+            {isCloudConnected ? (
+              <div
+                id="header-cloud-sync-status"
+                className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/60 transition"
+                title="Sincronização com Firebase em tempo real ativa"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Sincronizado</span>
+              </div>
+            ) : (
+              <button
+                id="header-cloud-offline-alert-btn"
+                type="button"
+                onClick={onRetryConnection}
+                disabled={isReconnecting}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/90 border border-amber-300 dark:border-amber-800 hover:bg-amber-200 dark:hover:bg-amber-900 transition cursor-pointer shadow-2xs group"
+                title="Sincronização com Firebase interrompida. As alterações estão sendo salvas localmente neste navegador. Clique para tentar reconectar."
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                <CloudOff className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
+                <span>
+                  <span className="font-bold">Offline</span>
+                  <span className="hidden sm:inline font-normal text-amber-800 dark:text-amber-300 ml-1">(Salvo local)</span>
+                </span>
+                <RefreshCw
+                  className={`w-3 h-3 ml-0.5 text-amber-700 dark:text-amber-400 ${
+                    isReconnecting ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'
+                  }`}
+                />
+              </button>
+            )}
+
             {/* Notification Bell Button */}
             <button
               id="notifications-drawer-btn"
@@ -343,35 +386,103 @@ export const Header: React.FC<HeaderProps> = ({
                   className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/80 text-xs text-slate-700 dark:text-slate-300 transition cursor-pointer"
                   title={`Conectado: ${currentUser.name}`}
                 >
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${currentUser.avatarBg}`}
-                  >
-                    {currentUser.name.charAt(0)}
-                  </span>
+                  {currentUser.photoURL ? (
+                    <img
+                      src={currentUser.photoURL}
+                      alt={currentUser.name}
+                      referrerPolicy="no-referrer"
+                      className="w-5 h-5 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+                    />
+                  ) : (
+                    <span
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${currentUser.avatarBg}`}
+                    >
+                      {currentUser.name.charAt(0)}
+                    </span>
+                  )}
                   <span className="hidden sm:inline font-medium text-xs max-w-[80px] truncate">{currentUser.name.split(' ')[0]}</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
 
                 {showUserDropdown && (
                   <div
-                    className="absolute right-0 mt-1.5 w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-2.5 z-50 text-xs space-y-1 animate-fade-in"
+                    className="absolute right-0 mt-1.5 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-2.5 z-50 text-xs space-y-1 animate-fade-in"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex items-center gap-2 pb-2 mb-1 border-b border-slate-100 dark:border-slate-800">
-                      <span
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${currentUser.avatarBg}`}
-                      >
-                        {currentUser.name.charAt(0)}
-                      </span>
+                    <div className="flex items-center gap-2.5 pb-2.5 mb-1 border-b border-slate-100 dark:border-slate-800">
+                      {currentUser.photoURL ? (
+                        <img
+                          src={currentUser.photoURL}
+                          alt={currentUser.name}
+                          referrerPolicy="no-referrer"
+                          className="w-9 h-9 rounded-full object-cover shrink-0 ring-1 ring-indigo-500/30"
+                        />
+                      ) : (
+                        <span
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${currentUser.avatarBg}`}
+                        >
+                          {currentUser.name.charAt(0)}
+                        </span>
+                      )}
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
-                          {currentUser.name}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            {currentUser.name}
+                          </p>
+                          {(currentUser.provider === 'google' || currentUser.email.toLowerCase().endsWith('@gmail.com')) && (
+                            <span className="px-1.5 py-0.2 bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 text-[9px] font-bold rounded-full border border-red-200 dark:border-red-900 shrink-0">
+                              Gmail
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                           {currentUser.email}
                         </p>
                       </div>
                     </div>
+
+                    {/* Firebase Cloud Sync Status Info */}
+                    <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-850/80 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-[11px] font-medium">
+                        {isCloudConnected ? (
+                          <Cloud className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        ) : (
+                          <CloudOff className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        )}
+                        <span>Sincronização:</span>
+                      </span>
+                      {isCloudConnected ? (
+                        <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/70 px-1.5 py-0.5 rounded">
+                          Nuvem Ativa
+                        </span>
+                      ) : (
+                        <button
+                          id="dropdown-retry-connection-btn"
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            onRetryConnection?.();
+                          }}
+                          className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-1.5 py-0.5 rounded hover:bg-amber-200 dark:hover:bg-amber-900 transition cursor-pointer"
+                          title="Clique para testar e reconectar com o Firebase"
+                        >
+                          Salvo Local (Reconectar)
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      id="user-menu-switch-account-btn"
+                      type="button"
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        onOpenAuthModal();
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition cursor-pointer"
+                    >
+                      <LogIn className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Trocar Conta / Login com Gmail</span>
+                    </button>
 
                     {onOpenTeamModal && (
                       <button
@@ -383,8 +494,8 @@ export const Header: React.FC<HeaderProps> = ({
                         }}
                         className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition cursor-pointer"
                       >
-                        <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                        <span>Gerenciar Equipe ({users.length})</span>
+                        <Users className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                        <span>Equipe do Projeto ({users.length})</span>
                       </button>
                     )}
 
@@ -397,31 +508,20 @@ export const Header: React.FC<HeaderProps> = ({
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition cursor-pointer"
                     >
                       <UserPlus className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Convidar / Adicionar</span>
+                      <span>Convidar Membro</span>
                     </button>
 
                     <button
-                      type="button"
-                      onClick={() => {
-                        setShowUserDropdown(false);
-                        onOpenAuthModal();
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition cursor-pointer"
-                    >
-                      <LogIn className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Trocar Conta / Login</span>
-                    </button>
-
-                    <button
+                      id="header-logout-btn"
                       type="button"
                       onClick={() => {
                         setShowUserDropdown(false);
                         onLogout();
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition cursor-pointer"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition cursor-pointer font-medium"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      <span>Desconectar</span>
+                      <span>Sair da Conta (Desconectar)</span>
                     </button>
                   </div>
                 )}
@@ -494,16 +594,26 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Overdue / Due soon subtle indicator */}
             {overdueCount > 0 && (
-              <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onOpenNotifications}
+                className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-900/50 px-2 py-0.5 rounded-md flex items-center gap-1 transition cursor-pointer shrink-0"
+                title="Clique para abrir a central de alertas"
+              >
                 <AlertTriangle className="w-3 h-3" />
-                {overdueCount} atrasada{overdueCount > 1 ? 's' : ''}
-              </span>
+                <span>{overdueCount} atrasada{overdueCount > 1 ? 's' : ''}</span>
+              </button>
             )}
             {dueSoonCount > 0 && overdueCount === 0 && (
-              <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onOpenNotifications}
+                className="text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-900/50 px-2 py-0.5 rounded-md flex items-center gap-1 transition cursor-pointer shrink-0"
+                title="Clique para abrir a central de alertas"
+              >
                 <Clock className="w-3 h-3" />
-                {dueSoonCount} prazo hoje
-              </span>
+                <span>{dueSoonCount} prazo hoje</span>
+              </button>
             )}
           </div>
 

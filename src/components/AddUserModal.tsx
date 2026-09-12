@@ -22,7 +22,6 @@ interface AddUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddUser: (user: Omit<User, 'id'>) => User;
-  onLoginAsNewUser?: (user: User) => void;
   onRemoveUser?: (userId: string) => void;
   existingUsers: User[];
   currentProject?: Project;
@@ -45,7 +44,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   isOpen,
   onClose,
   onAddUser,
-  onLoginAsNewUser,
   onRemoveUser,
   existingUsers,
   currentProject,
@@ -367,22 +365,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             </div>
 
             {/* Bottom Actions */}
-            <div className="pt-3 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-between gap-2">
-              {onLoginAsNewUser && createdUser ? (
-                <button
-                  id="login-as-invited-user-btn"
-                  type="button"
-                  onClick={() => {
-                    onLoginAsNewUser(createdUser);
-                    handleResetAndClose();
-                  }}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Entrar como {createdUser.name.split(' ')[0]} agora</span>
-                </button>
-              ) : <div />}
-
+            <div className="pt-3 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-end gap-2">
               <button
                 id="finish-invite-modal-btn"
                 type="button"

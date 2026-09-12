@@ -9,6 +9,9 @@ export interface User {
   email: string;
   avatarBg: string;
   role: string;
+  password?: string;
+  photoURL?: string;
+  provider?: 'google' | 'email';
 }
 
 export interface Subtask {
@@ -41,6 +44,7 @@ export interface Task {
   columnId: ColumnId;
   priority: TaskPriority;
   assigneeId?: string; // directed user
+  createdById?: string; // owner / creator
   subtasks: Subtask[];
   attachments: Attachment[];
   comments: Comment[];

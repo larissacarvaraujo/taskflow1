@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+} from 'firebase/auth';
 import {
   getFirestore,
   doc,
@@ -20,6 +25,37 @@ const app = initializeApp(firebaseConfig);
 // CRITICAL: Always provide firestoreDatabaseId
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// Configure Google Provider
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
+
+/**
+ * Sign in with Google Popup
+ */
+export async function signInWithGoogleAuth(): Promise<{
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}> {
+  const result = await signInWithPopup(auth, googleProvider);
+  return {
+    uid: result.user.uid,
+    displayName: result.user.displayName,
+    email: result.user.email,
+    photoURL: result.user.photoURL,
+  };
+}
+
+/**
+ * Sign out from Firebase Auth
+ */
+export async function signOutFirebase(): Promise<void> {
+  await firebaseSignOut(auth);
+}
 
 // SKILL SPECIFICATION: OperationType and FirestoreErrorInfo
 export enum OperationType {
@@ -74,16 +110,37 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection on boot
+// Connection status tracking
+type ConnectionListener = (isConnected: boolean) => void;
+const connectionListeners = new Set<ConnectionListener>();
+
+export function onConnectionChange(listener: ConnectionListener): () => void {
+  connectionListeners.add(listener);
+  return () => connectionListeners.delete(listener);
+}
+
+export function notifyConnectionStatus(isConnected: boolean) {
+  connectionListeners.forEach((fn) => {
+    try {
+      fn(isConnected);
+    } catch (e) {
+      console.error('Error in connection listener:', e);
+    }
+  });
+}
+
+// Test connection on boot and on demand
 export async function testConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.info('Connected to Firebase Firestore successfully.');
+    notifyConnectionStatus(true);
     return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase client is offline, check configuration.');
     }
+    notifyConnectionStatus(false);
     return false;
   }
 }
@@ -98,6 +155,7 @@ function cleanTaskPayload(task: Task): Record<string, unknown> {
     columnId: task.columnId,
     priority: task.priority,
     assigneeId: task.assigneeId || '',
+    createdById: task.createdById || '',
     subtasks: task.subtasks || [],
     attachments: task.attachments || [],
     comments: task.comments || [],
@@ -135,6 +193,7 @@ export function subscribeToTasks(
           columnId: data.columnId || 'todo',
           priority: data.priority || 'media',
           assigneeId: data.assigneeId || undefined,
+          createdById: data.createdById || undefined,
           subtasks: Array.isArray(data.subtasks) ? data.subtasks : [],
           attachments: Array.isArray(data.attachments) ? data.attachments : [],
           comments: Array.isArray(data.comments) ? data.comments : [],
@@ -164,7 +223,9 @@ export async function saveTaskToCloud(task: Task): Promise<void> {
   const path = `tasks/${task.id}`;
   try {
     await setDoc(doc(db, 'tasks', task.id), cleanTaskPayload(task), { merge: true });
+    notifyConnectionStatus(true);
   } catch (error) {
+    notifyConnectionStatus(false);
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
@@ -176,7 +237,9 @@ export async function deleteTaskFromCloud(taskId: string): Promise<void> {
   const path = `tasks/${taskId}`;
   try {
     await deleteDoc(doc(db, 'tasks', taskId));
+    notifyConnectionStatus(true);
   } catch (error) {
+    notifyConnectionStatus(false);
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
@@ -201,6 +264,9 @@ export function subscribeToUsers(
           email: d.email || '',
           avatarBg: d.avatarBg || 'bg-indigo-600 text-white',
           role: d.role || 'Colaborador',
+          password: d.password || '',
+          photoURL: d.photoURL || undefined,
+          provider: d.provider || (d.email?.endsWith('@gmail.com') ? 'google' : 'email'),
         };
       });
       onUsersUpdate(users);
@@ -219,19 +285,27 @@ export function subscribeToUsers(
 export async function saveUserToCloud(user: User): Promise<void> {
   const path = `users/${user.id}`;
   try {
-    await setDoc(
-      doc(db, 'users', user.id),
-      {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        avatarBg: user.avatarBg,
-        role: user.role,
-      },
-      { merge: true }
-    );
+    const payload: Record<string, unknown> = {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      avatarBg: user.avatarBg,
+      role: user.role,
+    };
+    if (user.password) {
+      payload.password = user.password;
+    }
+    if (user.photoURL) {
+      payload.photoURL = user.photoURL;
+    }
+    if (user.provider) {
+      payload.provider = user.provider;
+    }
+    await setDoc(doc(db, 'users', user.id), payload, { merge: true });
+    notifyConnectionStatus(true);
   } catch (error) {
+    notifyConnectionStatus(false);
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
@@ -243,7 +317,9 @@ export async function deleteUserFromCloud(userId: string): Promise<void> {
   const path = `users/${userId}`;
   try {
     await deleteDoc(doc(db, 'users', userId));
+    notifyConnectionStatus(true);
   } catch (error) {
+    notifyConnectionStatus(false);
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
@@ -299,7 +375,9 @@ export async function saveColumnToCloud(column: Column): Promise<void> {
       },
       { merge: true }
     );
+    notifyConnectionStatus(true);
   } catch (error) {
+    notifyConnectionStatus(false);
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
@@ -350,7 +428,9 @@ export async function saveMessageToCloud(msg: TeamChatMessage): Promise<void> {
       text: msg.text,
       createdAt: msg.createdAt,
     });
+    notifyConnectionStatus(true);
   } catch (error) {
+    notifyConnectionStatus(false);
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }

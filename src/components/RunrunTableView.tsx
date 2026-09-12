@@ -231,11 +231,20 @@ export const RunrunTableView: React.FC<RunrunTableViewProps> = ({
                       <td className="py-3 px-4">
                         {assignee ? (
                           <div className="flex items-center gap-2">
-                            <span
-                              className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs shrink-0 ${assignee.avatarBg}`}
-                            >
-                              {assignee.name.charAt(0)}
-                            </span>
+                            {assignee.photoURL ? (
+                              <img
+                                src={assignee.photoURL}
+                                alt={assignee.name}
+                                referrerPolicy="no-referrer"
+                                className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700"
+                              />
+                            ) : (
+                              <span
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs shrink-0 ${assignee.avatarBg}`}
+                              >
+                                {assignee.name.charAt(0)}
+                              </span>
+                            )}
                             <div className="flex flex-col min-w-0">
                               <span className="font-semibold text-xs text-slate-900 dark:text-slate-100 truncate">
                                 {assignee.name}

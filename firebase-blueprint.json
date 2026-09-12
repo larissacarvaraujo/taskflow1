@@ -11,6 +11,7 @@
         "columnId": { "type": "string" },
         "priority": { "type": "string" },
         "assigneeId": { "type": "string" },
+        "createdById": { "type": "string" },
         "dueDate": { "type": "string" },
         "estimatedHours": { "type": "number" },
         "trackedSeconds": { "type": "number" },
@@ -30,7 +31,8 @@
         "username": { "type": "string", "maxLength": 100 },
         "email": { "type": "string", "maxLength": 200 },
         "avatarBg": { "type": "string" },
-        "role": { "type": "string", "maxLength": 100 }
+        "role": { "type": "string", "maxLength": 100 },
+        "password": { "type": "string", "maxLength": 200 }
       },
       "required": ["id", "name", "email"]
     },

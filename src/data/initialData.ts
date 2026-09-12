@@ -2,12 +2,23 @@ import { User, Column, Project, Task } from '../types';
 
 export const INITIAL_USERS: User[] = [
   {
+    id: 'user-larissa',
+    name: 'Larissa Araújo',
+    username: 'larissa',
+    email: 'larissaaraujo.grupovirtron@gmail.com',
+    avatarBg: 'bg-indigo-600 text-white',
+    role: 'Gestora de Projetos',
+    provider: 'google',
+  },
+  {
     id: 'user-1',
     name: 'Graciele Silva',
     username: 'graciele',
     email: 'graciele14.silva@gmail.com',
-    avatarBg: 'bg-indigo-600 text-white',
+    avatarBg: 'bg-violet-600 text-white',
     role: 'Product Lead',
+    password: 'senha123',
+    provider: 'google',
   },
   {
     id: 'user-2',
@@ -16,6 +27,7 @@ export const INITIAL_USERS: User[] = [
     email: 'lucas.mendes@empresa.com',
     avatarBg: 'bg-emerald-600 text-white',
     role: 'Full Stack Dev',
+    password: 'senha123',
   },
   {
     id: 'user-3',
@@ -24,6 +36,7 @@ export const INITIAL_USERS: User[] = [
     email: 'ana.souza@empresa.com',
     avatarBg: 'bg-amber-600 text-white',
     role: 'UI/UX Designer',
+    password: 'senha123',
   },
   {
     id: 'user-4',
@@ -32,6 +45,7 @@ export const INITIAL_USERS: User[] = [
     email: 'carlos.rocha@empresa.com',
     avatarBg: 'bg-sky-600 text-white',
     role: 'Tech Lead',
+    password: 'senha123',
   },
   {
     id: 'user-5',
@@ -40,6 +54,7 @@ export const INITIAL_USERS: User[] = [
     email: 'mariana.costa@empresa.com',
     avatarBg: 'bg-rose-600 text-white',
     role: 'QA Engineer',
+    password: 'senha123',
   },
 ];
 

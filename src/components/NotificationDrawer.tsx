@@ -12,6 +12,9 @@ import {
   Monitor,
   ShieldAlert,
   BellRing,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import { NotificationItem, Task } from '../types';
 import { NotificationPermissionStatus } from '../services/systemNotificationService';
@@ -26,6 +29,8 @@ interface NotificationDrawerProps {
   notificationPermission: NotificationPermissionStatus;
   onRequestNotificationPermission: () => void;
   onTestSystemNotification: () => void;
+  isCloudConnected?: boolean;
+  onRetryConnection?: () => void;
 }
 
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
@@ -38,6 +43,8 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   notificationPermission,
   onRequestNotificationPermission,
   onTestSystemNotification,
+  isCloudConnected = true,
+  onRetryConnection,
 }) => {
   if (!isOpen) return null;
 
@@ -82,6 +89,69 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Persistent Firebase Cloud Sync Status Card */}
+        {isCloudConnected ? (
+          <div
+            id="drawer-cloud-sync-online-bar"
+            className="px-5 py-2.5 bg-emerald-50/60 dark:bg-emerald-950/40 border-b border-emerald-200/60 dark:border-emerald-900/50 flex items-center justify-between text-xs"
+          >
+            <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+              <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Cloud className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <span className="font-bold text-[11px] text-emerald-900 dark:text-emerald-200">
+                  Firebase Cloud Conectado
+                </span>
+                <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                  Alterações sincronizadas em tempo real
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Online
+            </span>
+          </div>
+        ) : (
+          <div
+            id="drawer-cloud-sync-offline-bar"
+            className="px-5 py-3 bg-amber-50 dark:bg-amber-950/80 border-b border-amber-300 dark:border-amber-800 text-xs space-y-2.5"
+          >
+            <div className="flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-amber-700 dark:text-amber-300 shrink-0 mt-0.5">
+                <CloudOff className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold text-amber-900 dark:text-amber-100 text-[12px]">
+                    Sincronização Firebase Interrompida
+                  </span>
+                  <span className="text-[9px] uppercase font-bold tracking-wider bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded">
+                    Modo Offline
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  A comunicação com o banco Firebase está pausada. <strong>Fique tranquilo:</strong> todas as tarefas que você criar ou atualizar estão sendo salvas com segurança no <strong>armazenamento local</strong> deste navegador e serão sincronizadas com a nuvem quando a conexão retornar.
+                </p>
+              </div>
+            </div>
+            {onRetryConnection && (
+              <div className="flex justify-end pt-0.5">
+                <button
+                  id="drawer-retry-connection-btn"
+                  type="button"
+                  onClick={onRetryConnection}
+                  className="px-3 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Testar e Reconectar</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* System & Audio Alerts Settings Bar */}
         <div className="px-5 py-3 bg-slate-50/80 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
@@ -211,26 +281,32 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                       <div
                         key={notif.id}
                         onClick={() => {
-                          onSelectTask(notif.taskId);
-                          onClose();
+                          if (notif.taskId) {
+                            onSelectTask(notif.taskId);
+                            onClose();
+                          }
                         }}
-                        className="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 hover:border-amber-300 dark:hover:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition cursor-pointer group"
+                        className={`p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 hover:border-amber-300 dark:hover:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition ${
+                          notif.taskId ? 'cursor-pointer group' : ''
+                        }`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span className="text-xs font-bold text-amber-900 dark:text-amber-200 line-clamp-1">
                             {notif.taskTitle}
                           </span>
                           <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded">
-                            Urgente
+                            {notif.taskId ? 'Urgente' : 'Aviso'}
                           </span>
                         </div>
                         <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
                           {notif.message}
                         </p>
-                        <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 group-hover:underline">
-                          <span>Ver detalhes da tarefa</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </div>
+                        {notif.taskId && (
+                          <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 group-hover:underline">
+                            <span>Ver detalhes da tarefa</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

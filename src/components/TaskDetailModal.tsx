@@ -147,20 +147,29 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
+    const fileList = Array.from(files);
+    let processedCount = 0;
+    const newAttachments: Attachment[] = [];
+
+    fileList.forEach((file: File) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const newAtt: Attachment = {
+        newAttachments.push({
           id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           name: file.name,
           size: file.size,
           type: file.type || 'application/octet-stream',
           url: (reader.result as string) || '#',
           uploadedAt: new Date().toISOString(),
-        };
-        const updated = [...attachments, newAtt];
-        setAttachments(updated);
-        handleSaveField({ attachments: updated });
+        });
+        processedCount++;
+        if (processedCount === fileList.length) {
+          setAttachments((prev) => {
+            const updated = [...prev, ...newAttachments];
+            handleSaveField({ attachments: updated });
+            return updated;
+          });
+        }
       };
       reader.readAsDataURL(file);
     });

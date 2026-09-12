@@ -12,7 +12,6 @@ import { AddUserModal } from './components/AddUserModal';
 import { TeamManagementModal } from './components/TeamManagementModal';
 import { InviteAcceptModal } from './components/InviteAcceptModal';
 import { TeamChatSidebar } from './components/TeamChatSidebar';
-import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 import { TagFilterSidebar, getTagPalette } from './components/TagFilterSidebar';
 import { Task, User, Project, Column, ColumnId, NotificationItem, TeamChatMessage, ActiveView } from './types';
 import { resolveInvite, StoredInvite } from './services/inviteService';
@@ -36,7 +35,7 @@ import {
   markAsNotified,
   NotificationPermissionStatus,
 } from './services/systemNotificationService';
-import { CheckCircle2, Undo2, AlertTriangle, X, Mail, Filter, Tag, SlidersHorizontal, ChevronRight } from 'lucide-react';
+import { CheckCircle2, Undo2, AlertTriangle, X, Mail, Filter, Tag, SlidersHorizontal, ChevronRight, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import {
   subscribeToTasks,
   saveTaskToCloud,
@@ -49,6 +48,9 @@ import {
   subscribeToMessages,
   saveMessageToCloud,
   seedInitialCloudDataIfEmpty,
+  signOutFirebase,
+  onConnectionChange,
+  testConnection,
 } from './firebase';
 
 const STORAGE_KEY_TASKS = 'taskflow_tasks_v2';
@@ -223,7 +225,10 @@ export default function App() {
   });
 
   // UI state
-  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -240,8 +245,30 @@ export default function App() {
     }
   });
 
-  // Real-time Firebase Cloud Synchronization
+  // Real-time Firebase Cloud Synchronization & Connection Listener
   useEffect(() => {
+    // 1. Listen for active connection changes from firebase.ts
+    const unsubConnection = onConnectionChange((connected) => {
+      setIsCloudConnected(connected);
+    });
+
+    // 2. Listen to browser online/offline events
+    const handleBrowserOnline = async () => {
+      const ok = await testConnection();
+      setIsCloudConnected(ok);
+    };
+    const handleBrowserOffline = () => {
+      setIsCloudConnected(false);
+    };
+
+    window.addEventListener('online', handleBrowserOnline);
+    window.addEventListener('offline', handleBrowserOffline);
+
+    // Initial connection test
+    testConnection().then((ok) => {
+      setIsCloudConnected(ok);
+    });
+
     // Seed initial collections to cloud if currently empty
     seedInitialCloudDataIfEmpty(INITIAL_TASKS, INITIAL_USERS, INITIAL_COLUMNS, INITIAL_PROJECTS);
 
@@ -255,6 +282,7 @@ export default function App() {
       },
       (err) => {
         console.warn('Tasks sync warning:', err);
+        setIsCloudConnected(false);
       }
     );
 
@@ -267,6 +295,7 @@ export default function App() {
       },
       (err) => {
         console.warn('Users sync warning:', err);
+        setIsCloudConnected(false);
       }
     );
 
@@ -279,6 +308,7 @@ export default function App() {
       },
       (err) => {
         console.warn('Columns sync warning:', err);
+        setIsCloudConnected(false);
       }
     );
 
@@ -291,16 +321,40 @@ export default function App() {
       },
       (err) => {
         console.warn('Messages sync warning:', err);
+        setIsCloudConnected(false);
       }
     );
 
     return () => {
+      unsubConnection();
+      window.removeEventListener('online', handleBrowserOnline);
+      window.removeEventListener('offline', handleBrowserOffline);
       unsubTasks();
       unsubUsers();
       unsubCols();
       unsubMsgs();
     };
   }, []);
+
+  // Manual or automatic reconnection handler
+  const handleRetryConnection = async () => {
+    setIsReconnecting(true);
+    try {
+      const ok = await testConnection();
+      setIsCloudConnected(ok);
+      if (ok) {
+        setToastMessage('Conexão restabelecida com o Firebase! Dados sincronizados.');
+        playAlertSound();
+      } else {
+        setToastMessage('Ainda offline. As alterações continuam salvas localmente neste dispositivo.');
+      }
+    } catch {
+      setIsCloudConnected(false);
+      setToastMessage('Falha ao conectar com o Firebase. As alterações continuam salvas localmente.');
+    } finally {
+      setIsReconnecting(false);
+    }
+  };
 
   // Modals & Drawers
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(
@@ -833,7 +887,8 @@ export default function App() {
       description: newTaskData.description || '',
       columnId: newTaskData.columnId || 'todo',
       priority: newTaskData.priority || 'media',
-      assigneeId: newTaskData.assigneeId,
+      assigneeId: newTaskData.assigneeId !== undefined ? newTaskData.assigneeId : currentUser?.id,
+      createdById: currentUser?.id,
       dueDate:
         newTaskData.dueDate ||
         new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
@@ -905,11 +960,27 @@ export default function App() {
     playAlertSound();
   };
 
-  // Unique tags across all tasks of current project
+  // Tasks accessible to current user (Isolation: user cannot access other users' tasks)
+  // "que o login seja via e-mail pra cada usuario especifico que entrar, que um não tenha acesso ao usuario do outro"
+  const userAccessibleTasks = useMemo(() => {
+    if (!currentUser) return [];
+    return tasks.filter((t) => {
+      if (t.projectId !== currentProjectId) return false;
+      const isAssignedToMe = t.assigneeId === currentUser.id;
+      const isCreatedByMe = t.createdById === currentUser.id;
+      // If task is assigned to another user and not created by current user, isolate/hide it:
+      if (t.assigneeId && !isAssignedToMe && !isCreatedByMe) {
+        return false;
+      }
+      return true;
+    });
+  }, [tasks, currentProjectId, currentUser]);
+
+  // Unique tags across all accessible tasks of current project
   const allProjectTags = useMemo(() => {
     const tagSet = new Set<string>();
-    tasks.forEach((t) => {
-      if (t.projectId === currentProjectId && Array.isArray(t.tags)) {
+    userAccessibleTasks.forEach((t) => {
+      if (Array.isArray(t.tags)) {
         t.tags.forEach((tag) => {
           const trimmed = tag.trim();
           if (trimmed) tagSet.add(trimmed);
@@ -917,13 +988,13 @@ export default function App() {
       }
     });
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [tasks, currentProjectId]);
+  }, [userAccessibleTasks]);
 
   // Counts of tasks per tag in current project
   const tagCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    tasks.forEach((t) => {
-      if (t.projectId === currentProjectId && Array.isArray(t.tags)) {
+    userAccessibleTasks.forEach((t) => {
+      if (Array.isArray(t.tags)) {
         t.tags.forEach((tag) => {
           const trimmed = tag.trim();
           if (trimmed) {
@@ -933,11 +1004,9 @@ export default function App() {
       }
     });
     return counts;
-  }, [tasks, currentProjectId]);
+  }, [userAccessibleTasks]);
 
-  const currentProjectTasksCount = useMemo(() => {
-    return tasks.filter((t) => t.projectId === currentProjectId).length;
-  }, [tasks, currentProjectId]);
+  const currentProjectTasksCount = userAccessibleTasks.length;
 
   const handleToggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -960,9 +1029,14 @@ export default function App() {
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      if (task.projectId !== currentProjectId) return false;
-      if (selectedUserId && task.assigneeId !== selectedUserId) return false;
+    return userAccessibleTasks.filter((task) => {
+      if (selectedUserId) {
+        if (selectedUserId === 'unassigned') {
+          if (task.assigneeId) return false;
+        } else if (task.assigneeId !== selectedUserId) {
+          return false;
+        }
+      }
       if (priorityFilter !== 'all' && task.priority !== priorityFilter)
         return false;
       
@@ -990,10 +1064,15 @@ export default function App() {
       }
       return true;
     });
-  }, [tasks, currentProjectId, selectedUserId, priorityFilter, selectedTags, tagFilterMode, searchQuery]);
+  }, [userAccessibleTasks, selectedUserId, priorityFilter, selectedTags, tagFilterMode, searchQuery]);
 
   // User Auth & Team Handlers
   const handleLogin = (user: User) => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CURRENT_USER, JSON.stringify(user));
+    } catch (e) {
+      console.warn('Error persisting currentUser:', e);
+    }
     setCurrentUser(user);
     setToastMessage(`Login realizado com sucesso! Conectado como ${user.name} (${user.email})`);
     playAlertSound();
@@ -1012,10 +1091,115 @@ export default function App() {
       return [...prev, newUser];
     });
     saveUserToCloud(newUser);
+
+    // Provide initial onboarding task for the new user account so they have their private workspace ready
+    const welcomeTask: Task = {
+      id: `task-welcome-${Date.now()}`,
+      projectId: currentProjectId || 'proj-1',
+      title: `Bem-vinda(o) ao TaskFlow, ${newUser.name.split(' ')[0]}!`,
+      description: 'Seu espaço de trabalho é individual e isolado. Suas tarefas ficam salvas com segurança no seu e-mail e nenhum outro usuário tem acesso. Crie suas demandas ou mova os cards pelas colunas do Kanban.',
+      columnId: 'todo',
+      priority: 'media',
+      assigneeId: newUser.id,
+      createdById: newUser.id,
+      dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+      estimatedHours: 2,
+      trackedSeconds: 0,
+      isTracking: false,
+      tags: ['Meu Painel', 'Boas-vindas'],
+      subtasks: [
+        { id: 'sub-welcome-1', title: 'Explorar as colunas do Kanban', completed: true },
+        { id: 'sub-welcome-2', title: 'Criar minha primeira tarefa pessoal no botão "+ Nova Tarefa"', completed: false },
+      ],
+      attachments: [],
+      comments: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setTasks((prev) => [welcomeTask, ...prev]);
+    saveTaskToCloud(welcomeTask);
+
+    try {
+      localStorage.setItem(STORAGE_KEY_CURRENT_USER, JSON.stringify(newUser));
+    } catch (e) {
+      console.warn('Error persisting currentUser:', e);
+    }
     setCurrentUser(newUser);
-    setToastMessage(`Nova conta criada e conectada: ${newUser.name} (@${newUser.username})`);
+    setToastMessage(`Conta criada com sucesso! Conectado(a) como ${newUser.name} (${newUser.email})`);
     playAlertSound();
     return newUser;
+  };
+
+  const handleGoogleLogin = (googleUserData: {
+    email: string;
+    name: string;
+    photoURL?: string;
+  }) => {
+    const cleanEmail = googleUserData.email.toLowerCase().trim();
+    let matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (matchedUser) {
+      if (googleUserData.photoURL && matchedUser.photoURL !== googleUserData.photoURL) {
+        matchedUser = { ...matchedUser, photoURL: googleUserData.photoURL, provider: 'google' };
+        setUsers((prev) => prev.map((u) => (u.id === matchedUser!.id ? matchedUser! : u)));
+        saveUserToCloud(matchedUser);
+      }
+      handleLogin(matchedUser);
+    } else {
+      const palettes = [
+        'bg-indigo-600 text-white',
+        'bg-emerald-600 text-white',
+        'bg-violet-600 text-white',
+        'bg-sky-600 text-white',
+        'bg-rose-600 text-white',
+        'bg-amber-600 text-white',
+      ];
+      const randomAvatar = palettes[Math.floor(Math.random() * palettes.length)];
+      const username = cleanEmail.split('@')[0].replace(/[^a-z0-9_.-]/g, '');
+
+      const newUser: User = {
+        id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: googleUserData.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        username: username || 'usuario',
+        avatarBg: randomAvatar,
+        role: 'Colaborador',
+        photoURL: googleUserData.photoURL,
+        provider: 'google',
+      };
+
+      setUsers((prev) => [...prev, newUser]);
+      saveUserToCloud(newUser);
+
+      // Onboarding task for Gmail account
+      const welcomeTask: Task = {
+        id: `task-welcome-${Date.now()}`,
+        projectId: currentProjectId || 'proj-1',
+        title: `Bem-vinda(o) ao TaskFlow, ${newUser.name.split(' ')[0]}!`,
+        description: `Painel individual conectado com o Gmail (${newUser.email}). Suas tarefas e demandas são isoladas e exclusivas da sua conta. Crie suas demandas ou mova os cards pelas colunas do Kanban.`,
+        columnId: 'todo',
+        priority: 'media',
+        assigneeId: newUser.id,
+        createdById: newUser.id,
+        dueDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+        estimatedHours: 2,
+        trackedSeconds: 0,
+        isTracking: false,
+        tags: ['Meu Painel', 'Gmail'],
+        subtasks: [
+          { id: 'sub-welcome-1', title: 'Explorar o quadro Kanban pessoal', completed: true },
+          { id: 'sub-welcome-2', title: 'Criar minha primeira tarefa no botão "+ Nova Tarefa"', completed: false },
+        ],
+        attachments: [],
+        comments: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setTasks((prev) => [welcomeTask, ...prev]);
+      saveTaskToCloud(welcomeTask);
+
+      handleLogin(newUser);
+    }
   };
 
   const handleAddUser = (userData: Omit<User, 'id'> | User): User => {
@@ -1033,8 +1217,14 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_CURRENT_USER);
+    } catch (e) {
+      console.warn('Error removing currentUser:', e);
+    }
+    signOutFirebase().catch(() => {});
     setCurrentUser(null);
-    setToastMessage('Você se desconectou. Você pode entrar novamente com seu e-mail a qualquer momento.');
+    setToastMessage('Você se desconectou. Entre com seu e-mail do Gmail a qualquer momento.');
   };
 
   const handleMentionUser = (mentionedUser: User, taskTitle: string, commentText: string) => {
@@ -1059,32 +1249,45 @@ export default function App() {
     }
   };
 
-  // Notifications calculation (Deadlines + Mentions & Assignments for Current User)
+  // Notifications calculation (Deadlines + Mentions & Assignments for Current User + Offline Alert)
   const notifications = useMemo(() => {
-    const projectTasks = tasks.filter((t) => t.projectId === currentProjectId);
-    const deadlineNotifs = generateDeadlineNotifications(projectTasks);
+    const deadlineNotifs = generateDeadlineNotifications(userAccessibleTasks);
     const mentionNotifs = generateMentionNotifications(
-      projectTasks,
+      userAccessibleTasks,
       currentUser?.id,
       users
     );
-    return [...deadlineNotifs, ...mentionNotifs];
-  }, [tasks, currentProjectId, currentUser, users]);
+    const list: NotificationItem[] = [...deadlineNotifs, ...mentionNotifs];
+    if (!isCloudConnected) {
+      list.unshift({
+        id: 'notif-firebase-offline',
+        taskId: '',
+        taskTitle: 'Sincronização Firebase Interrompida (Modo Offline)',
+        type: 'due_soon',
+        message:
+          'A conexão com a nuvem está temporariamente pausada. Todas as suas mudanças estão sendo salvas localmente neste dispositivo e serão sincronizadas quando você voltar a ficar online.',
+        createdAt: new Date().toISOString(),
+        read: false,
+        urgency: 'medium',
+      });
+    }
+    return list;
+  }, [userAccessibleTasks, currentUser, users, isCloudConnected]);
 
   const overdueCount = useMemo(() => {
-    return tasks.filter((t) => {
-      if (t.projectId !== currentProjectId || t.columnId === 'done') return false;
+    return userAccessibleTasks.filter((t) => {
+      if (t.columnId === 'done') return false;
       return getDeadlineStatus(t.dueDate, t.columnId).status === 'overdue';
     }).length;
-  }, [tasks, currentProjectId]);
+  }, [userAccessibleTasks]);
 
   const dueSoonCount = useMemo(() => {
-    return tasks.filter((t) => {
-      if (t.projectId !== currentProjectId || t.columnId === 'done') return false;
+    return userAccessibleTasks.filter((t) => {
+      if (t.columnId === 'done') return false;
       const st = getDeadlineStatus(t.dueDate, t.columnId).status;
       return st === 'due_today' || st === 'due_tomorrow';
     }).length;
-  }, [tasks, currentProjectId]);
+  }, [userAccessibleTasks]);
 
   const activeTrackingTask = useMemo(() => {
     return tasks.find((t) => t.id === activeTrackingTaskId) || null;
@@ -1095,7 +1298,7 @@ export default function App() {
     const checkDeadlinesAndSendAlerts = () => {
       if (notificationPermission !== 'granted') return;
 
-      for (const task of tasks) {
+      for (const task of userAccessibleTasks) {
         if (task.columnId === 'done' || !task.dueDate) continue;
 
         const deadlineInfo = getDeadlineStatus(task.dueDate, task.columnId);
@@ -1134,7 +1337,7 @@ export default function App() {
     // Check periodically every 30 seconds for deadlines reached while tab is backgrounded
     const interval = setInterval(checkDeadlinesAndSendAlerts, 30000);
     return () => clearInterval(interval);
-  }, [tasks, notificationPermission]);
+  }, [userAccessibleTasks, notificationPermission]);
 
   // Tab visibility: update browser document title dynamically when tab is inactive
   useEffect(() => {
@@ -1160,8 +1363,32 @@ export default function App() {
     };
   }, [overdueCount, dueSoonCount]);
 
+  // If user is not authenticated, show mandatory Auth Gate modal
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <AuthModal
+          isOpen={true}
+          isBlocking={true}
+          currentUser={null}
+          users={users}
+          existingUsers={users}
+          onClose={() => {}}
+          onLogin={handleLogin}
+          onRegisterAndLogin={handleRegisterAndLogin}
+          onGoogleLogin={handleGoogleLogin}
+        />
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-lg border border-slate-700 text-xs">
+            {toastMessage}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-black flex flex-col font-sans antialiased text-slate-900 dark:text-neutral-100 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50/70 dark:bg-[#090d16] flex flex-col font-sans antialiased text-slate-900 dark:text-slate-100 transition-colors duration-200">
       {/* Top Header */}
       <Header
         currentProject={currentProject}
@@ -1199,21 +1426,49 @@ export default function App() {
         onOpenTeamChat={() => setIsTeamChatOpen(true)}
         teamChatMessagesCount={projectTeamMessages.length}
         isCloudConnected={isCloudConnected}
+        onRetryConnection={handleRetryConnection}
+        isReconnecting={isReconnecting}
       />
 
-      {/* Browser Notification Permission Prompt Banner */}
-      <NotificationPermissionBanner
-        permission={notificationPermission}
-        onRequestPermission={handleRequestNotificationPermission}
-        onDismiss={handleDismissPermissionBanner}
-        isDismissed={isPermissionBannerDismissed}
-      />
+      {/* Persistent Offline Notice Alert Banner */}
+      {!isCloudConnected && (
+        <div
+          id="persistent-offline-alert-banner"
+          className="bg-amber-100/95 dark:bg-amber-950/90 border-b border-amber-300 dark:border-amber-800/80 px-4 py-2 text-xs text-amber-950 dark:text-amber-100 shadow-2xs z-20 transition-all duration-200"
+        >
+          <div className="max-w-[1720px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 text-left">
+              <div className="w-5 h-5 rounded-full bg-amber-200 dark:bg-amber-900 flex items-center justify-center text-amber-800 dark:text-amber-200 shrink-0">
+                <CloudOff className="w-3.5 h-3.5" />
+              </div>
+              <p className="text-[12px] leading-tight">
+                <span className="font-bold">Aviso de Sincronização:</span>{' '}
+                <span className="text-amber-900 dark:text-amber-200">
+                  A sincronização com o Firebase foi interrompida (offline). Suas alterações estão sendo <strong>salvas com segurança no armazenamento local</strong> deste navegador e serão sincronizadas na nuvem assim que a conexão retornar.
+                </span>
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="banner-retry-connection-btn"
+                type="button"
+                onClick={handleRetryConnection}
+                disabled={isReconnecting}
+                className="px-3 py-1 rounded-md bg-amber-700 hover:bg-amber-800 text-white font-semibold text-[11px] flex items-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3 h-3 ${isReconnecting ? 'animate-spin' : ''}`} />
+                <span>{isReconnecting ? 'Verificando...' : 'Tentar Reconectar'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Board / Table / Dashboard View */}
       <main className="flex-1 pb-12">
         {activeView === 'dashboard' ? (
           <DashboardView
-            tasks={tasks.filter((t) => t.projectId === currentProjectId)}
+            tasks={userAccessibleTasks}
             users={users}
             projectName={currentProject.name}
             activeTrackingTaskId={activeTrackingTaskId}
@@ -1446,6 +1701,7 @@ export default function App() {
           initialColumnId={newTaskInitialColumn}
           projectId={currentProjectId}
           users={users}
+          currentUser={currentUser}
           onAddTask={handleAddTask}
           onClose={() => setIsNewTaskOpen(false)}
           onOpenAddUser={() => setIsAddUserModalOpen(true)}
@@ -1458,6 +1714,7 @@ export default function App() {
         onClose={() => setIsNotificationsOpen(false)}
         notifications={notifications}
         onSelectTask={(taskId) => {
+          if (!taskId) return;
           const found = tasks.find((t) => t.id === taskId);
           if (found) setSelectedTaskForDetail(found);
         }}
@@ -1469,6 +1726,8 @@ export default function App() {
         notificationPermission={notificationPermission}
         onRequestNotificationPermission={handleRequestNotificationPermission}
         onTestSystemNotification={handleTestSystemNotification}
+        isCloudConnected={isCloudConnected}
+        onRetryConnection={handleRetryConnection}
       />
 
       {/* Team Chat Sidebar */}
@@ -1495,6 +1754,7 @@ export default function App() {
           onClose={() => setIsAuthModalOpen(false)}
           onLogin={handleLogin}
           onRegisterAndLogin={handleRegisterAndLogin}
+          onGoogleLogin={handleGoogleLogin}
         />
       )}
 
@@ -1508,7 +1768,6 @@ export default function App() {
           projectTasks={tasks.filter((t) => t.projectId === currentProjectId)}
           onClose={() => setIsAddUserModalOpen(false)}
           onAddUser={handleAddUser}
-          onLoginAsNewUser={handleLogin}
           onRemoveUser={handleRemoveUser}
         />
       )}
@@ -1522,10 +1781,6 @@ export default function App() {
           currentUser={currentUser}
           tasks={tasks.filter((t) => t.projectId === currentProjectId)}
           onRemoveUser={handleRemoveUser}
-          onSwitchUser={(user) => {
-            setCurrentUser(user);
-            setToastMessage(`Conectado como ${user.name}`);
-          }}
           onOpenAddUser={() => {
             setIsTeamManagementOpen(false);
             setIsAddUserModalOpen(true);
